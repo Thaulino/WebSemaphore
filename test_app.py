@@ -154,7 +154,7 @@ class SemaphoreTest(unittest.TestCase):
         self.post(f"/resources/{resource_id}/acquire", client=alice)
         response = self.post(f"/resources/{resource_id}/acquire", client=bob)
         self.assertIn("Resource locked", response.get_data(as_text=True))
-        self.assertIn("0 / 2 free", response.get_data(as_text=True))
+        self.assertIn("Locked 2/2", response.get_data(as_text=True))
 
     def test_only_owner_can_edit_or_delete(self):
         alice, bob = app_module.app.test_client(), app_module.app.test_client()
@@ -179,7 +179,7 @@ class SemaphoreTest(unittest.TestCase):
             labels="hardware rack-c",
         )
         self.assertIn("Now in rack C", edited.get_data(as_text=True))
-        self.assertIn("3 free", edited.get_data(as_text=True))
+        self.assertIn("Free 3/3", edited.get_data(as_text=True))
 
     def test_capacity_cannot_drop_below_slots_in_use(self):
         self.sign_up(self.client, "alice")
@@ -243,6 +243,76 @@ class SemaphoreTest(unittest.TestCase):
         self.assertIn("Recent history", page)
         self.assertNotIn("<details open", page)
         self.assertIn("first run", page)
+
+    def test_add_button_sits_by_the_search_box_not_in_the_header(self):
+        self.sign_up(self.client, "alice")
+        page = self.client.get("/").get_data(as_text=True)
+
+        header = page.split("<header")[1].split("</header>")[0]
+        self.assertNotIn("/resources/new", header)
+
+        head = page.split('class="card-head search-only"')[1].split("</div>")[0]
+        self.assertIn('class="search"', head)
+        self.assertIn('href="/resources/new"', head)
+        self.assertIn("Add resource", head)
+        self.assertEqual(200, self.client.get("/resources/new").status_code)
+
+    def test_list_has_column_headers(self):
+        self.sign_up(self.client, "alice")
+        self.create_resource(self.client)
+        head = self.client.get("/").get_data(as_text=True)
+        head = head.split('class="res-head"')[1].split("</div>")[0]
+        for column in ("Name", "Description", "Labels", "State", "Lock"):
+            self.assertIn(f"<span>{column}</span>", head)
+
+    def test_collapsed_row_shows_only_the_summary_fields(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        page = self.client.get("/").get_data(as_text=True)
+        summary = page.split('class="res-row"')[1].split("</summary>")[0]
+
+        # Visible while collapsed: name, description, labels, state, lock form.
+        self.assertIn("lab-pi-03", summary)
+        self.assertIn("Pi with the CAN adapter", summary)
+        self.assertIn("rack-b", summary)
+        self.assertIn("Free 1/1", summary)
+        self.assertIn('name="note"', summary)
+        self.assertIn(">Lock</button>", summary)
+
+        # Hidden until expanded: owner, edit/delete, history.
+        self.assertNotIn("owner alice", summary)
+        self.assertNotIn(">Edit</a>", summary)
+        self.assertNotIn("Recent history", summary)
+
+    def test_rows_are_collapsed_by_default(self):
+        self.sign_up(self.client, "alice")
+        self.create_resource(self.client)
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("<details>", page)
+        self.assertNotIn("<details open", page)
+
+    def test_edit_and_delete_sit_together(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        page = self.client.get("/").get_data(as_text=True)
+        actions = page.split('class="res-actions"')[1].split("</div>")[0]
+        self.assertIn(f"/resources/{resource_id}/edit", actions)
+        self.assertIn(f"/resources/{resource_id}/delete", actions)
+
+    def test_state_badge_keeps_free_and_busy_styling(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client, capacity=2)
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn('class="badge free"', page)
+
+        self.post(f"/resources/{resource_id}/acquire")
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Free 1/2", page)
+
+        self.post(f"/resources/{resource_id}/acquire")
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn('class="badge busy"', page)
+        self.assertIn("Locked 2/2", page)
 
     def test_your_resources_section_is_named_correctly(self):
         self.sign_up(self.client, "alice")

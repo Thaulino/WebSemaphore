@@ -26,7 +26,8 @@ a:hover { text-decoration: underline; }
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: .85rem 1.25rem;
+  /* Full-width bar, but its contents line up with the centred main column. */
+  padding: .85rem max(2rem, calc((100vw - 1600px) / 2 + 2rem));
   background: var(--panel);
   border-bottom: 1px solid var(--line);
 }
@@ -36,7 +37,8 @@ a:hover { text-decoration: underline; }
 .bar-left, .bar-right { display: flex; align-items: center; gap: 1rem; }
 .who { color: var(--muted); }
 
-main { max-width: 860px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+/* Wide enough to use the screen on a desktop; forms stay narrow below. */
+main { max-width: 1600px; margin: 0 auto; padding: 1.5rem 2rem 4rem; }
 
 .card {
   background: var(--panel);
@@ -145,13 +147,65 @@ form { margin: 0; }
 
 ul.resources, ul.mine { list-style: none; margin: 1rem 0 0; padding: 0; }
 
-ul.resources > li {
-  padding: .9rem 0;
-  border-top: 1px solid var(--line);
+ul.resources > li { border-top: 1px solid var(--line); }
+
+/* Collapsed row and its header share one grid so the columns line up. */
+.res-head, summary.res-row {
+  display: grid;
+  grid-template-columns:
+    1rem minmax(110px, 1.1fr) minmax(150px, 2fr) minmax(100px, 1fr) 7rem minmax(190px, 1.3fr);
+  gap: .75rem;
+  align-items: center;
 }
 
-ul.resources .row { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+.res-head {
+  margin-top: 1rem;
+  padding: .45rem .2rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: .75rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+summary.res-row {
+  padding: .7rem .2rem;
+  cursor: pointer;
+  list-style: none;
+}
+summary.res-row::-webkit-details-marker { display: none; }
+summary.res-row:hover { background: rgba(255, 255, 255, .02); }
+
+.caret {
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  transition: transform .15s ease;
+}
+details[open] > summary .caret { transform: rotate(90deg); }
+
 ul.resources .name { font-weight: 600; color: var(--text); }
+.res-row .desc { margin: 0; font-size: .9rem; color: var(--muted); }
+.res-row .labels { margin: 0; }
+.res-row .badge { white-space: nowrap; }
+.lock-cell .claim { margin: 0; }
+.lock-cell input { min-width: 0; }
+
+.res-detail {
+  padding: .2rem .2rem 1rem 1.75rem;
+  border-top: 1px dashed var(--line);
+}
+.res-detail > p { margin: .5rem 0; }
+.res-actions { display: flex; gap: .5rem; align-items: center; }
+.res-actions .button.small { padding: .25rem .6rem; font-size: .85rem; }
+
+@media (max-width: 880px) {
+  main { padding-inline: 1.25rem; }
+  .bar { padding-inline: 1.25rem; }
+  .res-head { display: none; }
+  summary.res-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .res-row .desc { flex-basis: 100%; }
+}
 
 ul.mine > li {
   display: flex;
@@ -166,7 +220,7 @@ ul.mine > li:first-child { border-top: none; }
 .claim { display: flex; gap: .5rem; margin-top: .6rem; }
 .claim input { margin: 0; }
 
-.card-head.search-only { justify-content: flex-end; }
+.card-head.search-only { justify-content: flex-end; gap: .5rem; }
 
 ul.holders { list-style: none; margin: .5rem 0 0; padding: 0; }
 ul.holders > li {

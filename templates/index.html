@@ -28,6 +28,7 @@
       <input name="q" value="{{ query }}" placeholder="Search name or description">
       <button type="submit">Search</button>
     </form>
+    <a class="button" href="{{ url_for('new_resource') }}">Add resource</a>
   </div>
 
   {% if labels %}
@@ -41,84 +42,106 @@
   {% endif %}
 
   {% if items %}
+    <div class="res-head">
+      <span></span>
+      <span>Name</span>
+      <span>Description</span>
+      <span>Labels</span>
+      <span>State</span>
+      <span>Lock</span>
+    </div>
+
     <ul class="resources">
       {% for item in items %}
         {% set resource = item['resource'] %}
         <li id="r{{ resource['id'] }}">
-          <div class="row">
-            <span class="name">{{ resource['name'] }}</span>
-            <span class="badge {{ 'free' if item['free'] else 'busy' }}">
-              {{ item['free'] }} / {{ resource['capacity'] }} free
-            </span>
-          </div>
-
-          {% if resource['description'] %}<p class="desc">{{ resource['description'] }}</p>{% endif %}
-
-          <p class="labels">
-            {% for label in item['labels'] %}
-              <a class="chip" href="{{ url_for('index', label=label) }}">{{ label }}</a>
-            {% endfor %}
-            <span class="muted">owner {{ resource['owner'] }}</span>
-            {% if item['can_manage'] %}
-              <a class="muted" href="{{ url_for('edit_resource', resource_id=resource['id']) }}">edit</a>
-              <form method="post" action="{{ url_for('delete_resource', resource_id=resource['id']) }}"
-                    onsubmit="return confirm('Delete {{ resource['name'] }} and its history?')">
-                <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-                <button class="link danger-link" type="submit">delete</button>
-              </form>
-            {% endif %}
-          </p>
-
-          {% if item['active'] %}
-            <ul class="holders">
-              {% for claim in item['active'] %}
-                <li>
-                  <strong>{{ claim['username'] }}</strong>
-                  <span class="muted">
-                    locked {{ claim['acquired_at']|since }} ago{% if claim['note'] %} — {{ claim['note'] }}{% endif %}
-                  </span>
-                  {% if claim['user_id'] == user['id'] or item['can_manage'] %}
-                    <form method="post" action="{{ url_for('release', claim_id=claim['id']) }}">
-                      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-                      <input type="hidden" name="back" value="{{ back }}">
-                      <button class="small" type="submit">
-                        {{ 'Release' if claim['user_id'] == user['id'] else 'Force release' }}
-                      </button>
-                    </form>
-                  {% endif %}
-                </li>
-              {% endfor %}
-            </ul>
-          {% else %}
-            <p class="muted">Free — nobody is using this.</p>
-          {% endif %}
-
-          {% if item['free'] %}
-            <form class="claim" method="post"
-                  action="{{ url_for('acquire', resource_id=resource['id']) }}">
-              <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-              <input type="hidden" name="back" value="{{ back }}">
-              <input name="note" maxlength="200" placeholder="What are you using it for? (optional)">
-              <button type="submit">Lock</button>
-            </form>
-          {% endif %}
-
-          {% if item['history'] %}
-            <details class="history">
-              <summary>Recent history ({{ item['history']|length }})</summary>
-              <table>
-                <tr><th>User</th><th>From</th><th>To</th><th>Comment</th></tr>
-                {% for claim in item['history'] %}
-                  <tr>
-                    <td>{{ claim['username'] }}</td>
-                    <td>{{ claim['acquired_at']|stamp }}</td>
-                    <td>{{ claim['released_at']|stamp }}</td>
-                    <td class="muted">{{ claim['note'] }}</td>
-                  </tr>
+          <details>
+            <summary class="res-row">
+              <span class="caret" aria-hidden="true">›</span>
+              <span class="name">{{ resource['name'] }}</span>
+              <span class="desc">{{ resource['description'] }}</span>
+              <span class="labels">
+                {% for label in item['labels'] %}
+                  <a class="chip" href="{{ url_for('index', label=label) }}">{{ label }}</a>
                 {% endfor %}
-              </table>
-            </details>
-          {% endif %}
+              </span>
+              <span>
+                <span class="badge {{ 'free' if item['free'] else 'busy' }}">
+                  {% if item['free'] %}Free {{ item['free'] }}/{{ resource['capacity'] }}
+                  {% else %}Locked {{ resource['capacity'] }}/{{ resource['capacity'] }}{% endif %}
+                </span>
+              </span>
+              <span class="lock-cell">
+                {% if item['free'] %}
+                  <form class="claim" method="post"
+                        action="{{ url_for('acquire', resource_id=resource['id']) }}">
+                    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                    <input type="hidden" name="back" value="{{ back }}">
+                    <input name="note" maxlength="200" placeholder="Comment (optional)">
+                    <button type="submit">Lock</button>
+                  </form>
+                {% endif %}
+              </span>
+            </summary>
+
+            <div class="res-detail">
+              {% if item['active'] %}
+                <ul class="holders">
+                  {% for claim in item['active'] %}
+                    <li>
+                      <strong>{{ claim['username'] }}</strong>
+                      <span class="muted">
+                        locked {{ claim['acquired_at']|since }} ago{% if claim['note'] %} — {{ claim['note'] }}{% endif %}
+                      </span>
+                      {% if claim['user_id'] == user['id'] or item['can_manage'] %}
+                        <form method="post" action="{{ url_for('release', claim_id=claim['id']) }}">
+                          <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                          <input type="hidden" name="back" value="{{ back }}">
+                          <button class="small" type="submit">
+                            {{ 'Release' if claim['user_id'] == user['id'] else 'Force release' }}
+                          </button>
+                        </form>
+                      {% endif %}
+                    </li>
+                  {% endfor %}
+                </ul>
+              {% else %}
+                <p class="muted">Nobody is using this right now.</p>
+              {% endif %}
+
+              <p class="muted">
+                owner {{ resource['owner'] }} · added {{ resource['created_at']|stamp }}
+              </p>
+
+              {% if item['can_manage'] %}
+                <div class="res-actions">
+                  <a class="button small" href="{{ url_for('edit_resource', resource_id=resource['id']) }}">Edit</a>
+                  <form method="post" action="{{ url_for('delete_resource', resource_id=resource['id']) }}"
+                        onsubmit="return confirm('Delete {{ resource['name'] }} and its history?')">
+                    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                    <button class="small danger" type="submit">Delete</button>
+                  </form>
+                </div>
+              {% endif %}
+
+              {% if item['history'] %}
+                <details class="history">
+                  <summary>Recent history ({{ item['history']|length }})</summary>
+                  <table>
+                    <tr><th>User</th><th>From</th><th>To</th><th>Comment</th></tr>
+                    {% for claim in item['history'] %}
+                      <tr>
+                        <td>{{ claim['username'] }}</td>
+                        <td>{{ claim['acquired_at']|stamp }}</td>
+                        <td>{{ claim['released_at']|stamp }}</td>
+                        <td class="muted">{{ claim['note'] }}</td>
+                      </tr>
+                    {% endfor %}
+                  </table>
+                </details>
+              {% endif %}
+            </div>
+          </details>
         </li>
       {% endfor %}
     </ul>

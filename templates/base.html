@@ -11,7 +11,6 @@
     <nav class="bar-left">
       <a class="brand" href="{{ url_for('index') }}">Resources</a>
       {% if user %}
-        <a href="{{ url_for('new_resource') }}">New resource</a>
         <a href="{{ url_for('settings') }}">API tokens</a>
         {% if user['is_admin'] %}<a href="{{ url_for('admin_users') }}">Admin</a>{% endif %}
       {% endif %}

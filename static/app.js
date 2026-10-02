@@ -1,3 +1,12 @@
+// The collapsed resource row carries the lock form and the label links.
+// Without this, clicking either of them would fold the row instead.
+document.querySelectorAll('summary input, summary button, summary a').forEach(
+  function (el) {
+    el.addEventListener('click', function (event) { event.stopPropagation(); });
+    el.addEventListener('keydown', function (event) { event.stopPropagation(); });
+  }
+);
+
 // Adds a show/hide switch to every password field marked data-reveal.
 document.querySelectorAll('input[data-reveal]').forEach(function (input) {
   var wrapper = document.createElement('span');
