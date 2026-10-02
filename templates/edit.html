@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% set editing = resource is not none %}
+{% block title %}{{ 'Edit' if editing else 'New' }} resource · Semaphore{% endblock %}
+
+{% block content %}
+<div class="card narrow">
+  <h1>{{ 'Edit resource' if editing else 'New resource' }}</h1>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <label>Name
+      <input name="name" value="{{ form.get('name', '') }}"
+             placeholder="lab-pi-03" autofocus required>
+    </label>
+    <label>What is it / what does it do
+      <textarea name="description" rows="4"
+                placeholder="Raspberry Pi 4 in rack B with the CAN adapter attached. Reachable at 10.0.3.12.">{{ form.get('description', '') }}</textarea>
+    </label>
+    <label>Labels
+      <input name="labels" value="{{ labels }}" placeholder="hardware can-bus rack-b">
+      <small class="muted">Space or comma separated, used for filtering.</small>
+    </label>
+    <label>Slots
+      <input name="capacity" type="number" min="1" max="999"
+             value="{{ form.get('capacity') or 1 }}" required>
+      <small class="muted">How many people can use it at the same time. 1 means exclusive access.</small>
+    </label>
+    <button type="submit">{{ 'Save changes' if editing else 'Create resource' }}</button>
+    {% if editing %}
+      <a class="muted" href="{{ url_for('resource_detail', resource_id=resource['id']) }}">Cancel</a>
+    {% endif %}
+  </form>
+</div>
+{% endblock %}

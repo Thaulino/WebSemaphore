@@ -1,0 +1,170 @@
+:root {
+  --bg: #11131a;
+  --panel: #1a1d27;
+  --line: #2a2f3d;
+  --text: #e6e8ef;
+  --muted: #949bb0;
+  --accent: #5b8cff;
+  --green: #3ec98a;
+  --red: #e5636b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem 1.25rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { font-weight: 650; font-size: 1.05rem; color: var(--text); }
+.bar nav { display: flex; align-items: center; gap: 1rem; }
+.who { color: var(--muted); }
+
+main { max-width: 860px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.card.narrow { max-width: 440px; margin-inline: auto; }
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+h1 { font-size: 1.3rem; margin: 0 0 .75rem; }
+h2 { font-size: 1.05rem; margin: 0 0 .75rem; }
+.card-head h1 { margin: 0; }
+
+.muted { color: var(--muted); font-size: .9rem; }
+.desc { white-space: pre-wrap; margin: .5rem 0; }
+
+label { display: block; margin-bottom: .9rem; color: var(--muted); font-size: .9rem; }
+
+input, textarea, button {
+  font: inherit;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+}
+
+input, textarea {
+  width: 100%;
+  margin-top: .3rem;
+  padding: .5rem .65rem;
+  background: #141722;
+  color: var(--text);
+}
+
+input:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+textarea { resize: vertical; }
+label small { display: block; margin-top: .3rem; }
+
+button, .button {
+  padding: .5rem .9rem;
+  background: var(--accent);
+  color: #0b0d13;
+  font-weight: 600;
+  border: none;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+button:hover, .button:hover { filter: brightness(1.1); text-decoration: none; }
+button.small { padding: .25rem .6rem; font-size: .85rem; }
+button.danger { background: var(--red); color: #fff; }
+button.link {
+  background: none;
+  color: var(--accent);
+  padding: 0;
+  font-weight: 400;
+}
+
+form { margin: 0; }
+.owner-actions { display: flex; gap: .6rem; align-items: center; }
+
+.search { display: flex; gap: .5rem; }
+.search input { margin: 0; min-width: 240px; }
+
+.flash {
+  padding: .6rem .9rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  margin-bottom: 1rem;
+}
+.flash.ok { border-color: var(--green); color: var(--green); }
+.flash.error { border-color: var(--red); color: var(--red); }
+
+.labels { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin: .5rem 0 0; }
+
+.chip {
+  display: inline-block;
+  padding: .12rem .55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #141722;
+  color: var(--muted);
+  font-size: .82rem;
+}
+.chip:hover { text-decoration: none; border-color: var(--accent); color: var(--text); }
+.chip.on { background: var(--accent); color: #0b0d13; border-color: transparent; }
+.chip span { opacity: .7; }
+
+.badge {
+  padding: .2rem .6rem;
+  border-radius: 999px;
+  font-size: .85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge.free { background: rgba(62, 201, 138, .15); color: var(--green); }
+.badge.busy { background: rgba(229, 99, 107, .15); color: var(--red); }
+
+ul.resources, ul.mine { list-style: none; margin: 1rem 0 0; padding: 0; }
+
+ul.resources > li {
+  padding: .9rem 0;
+  border-top: 1px solid var(--line);
+}
+
+ul.resources .row { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+ul.resources .name { font-weight: 600; color: var(--text); }
+
+ul.mine > li {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  flex-wrap: wrap;
+  padding: .55rem 0;
+  border-top: 1px solid var(--line);
+}
+ul.mine > li:first-child { border-top: none; }
+
+.claim { display: flex; gap: .5rem; margin-top: 1rem; }
+.claim input { margin: 0; }
+
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: .45rem .5rem; border-top: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 500; }

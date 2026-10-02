@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Resources · Semaphore{% endblock %}
+
+{% block content %}
+{% if mine %}
+  <section class="card">
+    <h2>Your slots</h2>
+    <ul class="mine">
+      {% for claim in mine %}
+        <li>
+          <a href="{{ url_for('resource_detail', resource_id=claim['resource_id']) }}">{{ claim['name'] }}</a>
+          <span class="muted">held {{ claim['acquired_at']|since }}{% if claim['note'] %} — {{ claim['note'] }}{% endif %}</span>
+          <form method="post" action="{{ url_for('release', claim_id=claim['id']) }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="back" value="{{ url_for('index') }}">
+            <button class="small" type="submit">Release</button>
+          </form>
+        </li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
+
+<section class="card">
+  <div class="card-head">
+    <h1>Shared resources</h1>
+    <form class="search" method="get">
+      {% if active_label %}<input type="hidden" name="label" value="{{ active_label }}">{% endif %}
+      <input name="q" value="{{ query }}" placeholder="Search name or description">
+      <button type="submit">Search</button>
+    </form>
+  </div>
+
+  {% if labels %}
+    <p class="labels">
+      <a class="chip {% if not active_label %}on{% endif %}" href="{{ url_for('index', q=query or None) }}">all</a>
+      {% for label, count in labels %}
+        <a class="chip {% if label == active_label %}on{% endif %}"
+           href="{{ url_for('index', label=label, q=query or None) }}">{{ label }} <span>{{ count }}</span></a>
+      {% endfor %}
+    </p>
+  {% endif %}
+
+  {% if items %}
+    <ul class="resources">
+      {% for resource, labels in items %}
+        {% set free = resource['capacity'] - resource['in_use'] %}
+        <li>
+          <div class="row">
+            <a class="name" href="{{ url_for('resource_detail', resource_id=resource['id']) }}">{{ resource['name'] }}</a>
+            <span class="badge {{ 'free' if free else 'busy' }}">{{ free }} / {{ resource['capacity'] }} free</span>
+          </div>
+          {% if resource['description'] %}<p class="desc">{{ resource['description'] }}</p>{% endif %}
+          <p class="labels">
+            {% for label in labels %}
+              <a class="chip" href="{{ url_for('index', label=label) }}">{{ label }}</a>
+            {% endfor %}
+            <span class="muted">owner {{ resource['owner'] }}</span>
+          </p>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">No resources match. <a href="{{ url_for('new_resource') }}">Create one</a>.</p>
+  {% endif %}
+</section>
+{% endblock %}

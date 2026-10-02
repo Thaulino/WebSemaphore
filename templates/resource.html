@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ resource['name'] }} · Semaphore{% endblock %}
+
+{% block content %}
+<section class="card">
+  <div class="card-head">
+    <h1>{{ resource['name'] }}</h1>
+    <span class="badge {{ 'free' if free else 'busy' }}">{{ free }} / {{ resource['capacity'] }} free</span>
+  </div>
+
+  {% if resource['description'] %}
+    <p class="desc">{{ resource['description'] }}</p>
+  {% endif %}
+
+  <p class="labels">
+    {% for label in labels %}
+      <a class="chip" href="{{ url_for('index', label=label) }}">{{ label }}</a>
+    {% endfor %}
+    <span class="muted">owner {{ resource['owner'] }} · added {{ resource['created_at']|stamp }}</span>
+  </p>
+
+  {% if is_owner %}
+    <p class="owner-actions">
+      <a class="button" href="{{ url_for('edit_resource', resource_id=resource['id']) }}">Edit</a>
+      <form method="post" action="{{ url_for('delete_resource', resource_id=resource['id']) }}"
+            onsubmit="return confirm('Delete {{ resource['name'] }} and its history?')">
+        <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+        <button class="danger" type="submit">Delete</button>
+      </form>
+    </p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>In use</h2>
+  {% if active %}
+    <ul class="mine">
+      {% for claim in active %}
+        <li>
+          <strong>{{ claim['username'] }}</strong>
+          <span class="muted">since {{ claim['acquired_at']|stamp }} ({{ claim['acquired_at']|since }}){% if claim['note'] %} — {{ claim['note'] }}{% endif %}</span>
+          {% if claim['user_id'] == user['id'] or is_owner %}
+            <form method="post" action="{{ url_for('release', claim_id=claim['id']) }}">
+              <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+              <button class="small" type="submit">
+                {{ 'Release' if claim['user_id'] == user['id'] else 'Force release' }}
+              </button>
+            </form>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">Nobody is using this right now.</p>
+  {% endif %}
+
+  {% if free %}
+    <form class="claim" method="post" action="{{ url_for('acquire', resource_id=resource['id']) }}">
+      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+      <input name="note" maxlength="200" placeholder="What are you using it for? (optional)">
+      <button type="submit">Take a slot</button>
+    </form>
+    {% if held_by_me %}
+      <p class="muted">You already hold a slot here; taking another is allowed.</p>
+    {% endif %}
+  {% else %}
+    <p class="muted">All slots are occupied — check back when someone releases.</p>
+  {% endif %}
+</section>
+
+{% if history %}
+  <section class="card">
+    <h2>Recent history</h2>
+    <table>
+      <tr><th>User</th><th>From</th><th>To</th><th>Note</th></tr>
+      {% for claim in history %}
+        <tr>
+          <td>{{ claim['username'] }}</td>
+          <td>{{ claim['acquired_at']|stamp }}</td>
+          <td>{{ claim['released_at']|stamp }}</td>
+          <td class="muted">{{ claim['note'] }}</td>
+        </tr>
+      {% endfor %}
+    </table>
+  </section>
+{% endif %}
+{% endblock %}
