@@ -4,15 +4,15 @@
 {% block content %}
 {% if mine %}
   <section class="card">
-    <h2>Your slots</h2>
+    <h2>Your resources</h2>
     <ul class="mine">
       {% for claim in mine %}
         <li>
-          <a href="{{ url_for('resource_detail', resource_id=claim['resource_id']) }}">{{ claim['name'] }}</a>
+          <a href="#r{{ claim['resource_id'] }}">{{ claim['name'] }}</a>
           <span class="muted">held {{ claim['acquired_at']|since }}{% if claim['note'] %} — {{ claim['note'] }}{% endif %}</span>
           <form method="post" action="{{ url_for('release', claim_id=claim['id']) }}">
             <input type="hidden" name="csrf" value="{{ csrf_token() }}">
-            <input type="hidden" name="back" value="{{ url_for('index') }}">
+            <input type="hidden" name="back" value="{{ back }}">
             <button class="small" type="submit">Release</button>
           </form>
         </li>
@@ -22,8 +22,7 @@
 {% endif %}
 
 <section class="card">
-  <div class="card-head">
-    <h1>Shared resources</h1>
+  <div class="card-head search-only">
     <form class="search" method="get">
       {% if active_label %}<input type="hidden" name="label" value="{{ active_label }}">{% endif %}
       <input name="q" value="{{ query }}" placeholder="Search name or description">
@@ -43,20 +42,83 @@
 
   {% if items %}
     <ul class="resources">
-      {% for resource, labels in items %}
-        {% set free = resource['capacity'] - resource['in_use'] %}
-        <li>
+      {% for item in items %}
+        {% set resource = item['resource'] %}
+        <li id="r{{ resource['id'] }}">
           <div class="row">
-            <a class="name" href="{{ url_for('resource_detail', resource_id=resource['id']) }}">{{ resource['name'] }}</a>
-            <span class="badge {{ 'free' if free else 'busy' }}">{{ free }} / {{ resource['capacity'] }} free</span>
+            <span class="name">{{ resource['name'] }}</span>
+            <span class="badge {{ 'free' if item['free'] else 'busy' }}">
+              {{ item['free'] }} / {{ resource['capacity'] }} free
+            </span>
           </div>
+
           {% if resource['description'] %}<p class="desc">{{ resource['description'] }}</p>{% endif %}
+
           <p class="labels">
-            {% for label in labels %}
+            {% for label in item['labels'] %}
               <a class="chip" href="{{ url_for('index', label=label) }}">{{ label }}</a>
             {% endfor %}
             <span class="muted">owner {{ resource['owner'] }}</span>
+            {% if item['can_manage'] %}
+              <a class="muted" href="{{ url_for('edit_resource', resource_id=resource['id']) }}">edit</a>
+              <form method="post" action="{{ url_for('delete_resource', resource_id=resource['id']) }}"
+                    onsubmit="return confirm('Delete {{ resource['name'] }} and its history?')">
+                <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                <button class="link danger-link" type="submit">delete</button>
+              </form>
+            {% endif %}
           </p>
+
+          {% if item['active'] %}
+            <ul class="holders">
+              {% for claim in item['active'] %}
+                <li>
+                  <strong>{{ claim['username'] }}</strong>
+                  <span class="muted">
+                    locked {{ claim['acquired_at']|since }} ago{% if claim['note'] %} — {{ claim['note'] }}{% endif %}
+                  </span>
+                  {% if claim['user_id'] == user['id'] or item['can_manage'] %}
+                    <form method="post" action="{{ url_for('release', claim_id=claim['id']) }}">
+                      <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+                      <input type="hidden" name="back" value="{{ back }}">
+                      <button class="small" type="submit">
+                        {{ 'Release' if claim['user_id'] == user['id'] else 'Force release' }}
+                      </button>
+                    </form>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">Free — nobody is using this.</p>
+          {% endif %}
+
+          {% if item['free'] %}
+            <form class="claim" method="post"
+                  action="{{ url_for('acquire', resource_id=resource['id']) }}">
+              <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+              <input type="hidden" name="back" value="{{ back }}">
+              <input name="note" maxlength="200" placeholder="What are you using it for? (optional)">
+              <button type="submit">Lock</button>
+            </form>
+          {% endif %}
+
+          {% if item['history'] %}
+            <details class="history">
+              <summary>Recent history ({{ item['history']|length }})</summary>
+              <table>
+                <tr><th>User</th><th>From</th><th>To</th><th>Comment</th></tr>
+                {% for claim in item['history'] %}
+                  <tr>
+                    <td>{{ claim['username'] }}</td>
+                    <td>{{ claim['acquired_at']|stamp }}</td>
+                    <td>{{ claim['released_at']|stamp }}</td>
+                    <td class="muted">{{ claim['note'] }}</td>
+                  </tr>
+                {% endfor %}
+              </table>
+            </details>
+          {% endif %}
         </li>
       {% endfor %}
     </ul>

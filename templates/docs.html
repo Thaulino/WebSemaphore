@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}API · Semaphore{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>{{ spec['info']['title'] }} <span class="muted">v{{ spec['info']['version'] }}</span></h1>
+  <p class="desc">{{ spec['info']['description'] }}</p>
+  <p class="muted">
+    Machine-readable OpenAPI {{ spec['openapi'] }} document:
+    <a href="{{ url_for('api.spec') }}">/api/openapi.json</a> — feed it to Postman,
+    Swagger UI or a client generator. Manage your tokens under
+    <a href="{{ url_for('settings') }}">API tokens</a>.
+  </p>
+</section>
+
+{% for path, operations in spec['paths'].items() %}
+  {% for method, operation in operations.items() %}
+    <section class="card endpoint">
+      <div class="card-head">
+        <h2><span class="method {{ method }}">{{ method|upper }}</span> <code>{{ path }}</code></h2>
+      </div>
+      <p>{{ operation['summary'] }}</p>
+      {% if operation['description'] %}
+        <p class="muted">{{ operation['description'] }}</p>
+      {% endif %}
+
+      {% if operation['parameters'] %}
+        <h3>Parameters</h3>
+        <table>
+          <tr><th>Name</th><th>In</th><th>Type</th><th></th></tr>
+          {% for parameter in operation['parameters'] %}
+            <tr>
+              <td><code>{{ parameter['name'] }}</code>{% if parameter['required'] %} <span class="req">required</span>{% endif %}</td>
+              <td class="muted">{{ parameter['in'] }}</td>
+              <td class="muted">{{ parameter['schema']['type'] }}</td>
+              <td class="muted">{{ parameter['description'] or '' }}</td>
+            </tr>
+          {% endfor %}
+        </table>
+      {% endif %}
+
+      {% set body = operation.get('requestBody') %}
+      {% if body %}
+        <h3>Request body</h3>
+        {% for name, example in body['content']['application/json'].get('examples', {}).items() %}
+          <p class="muted">{{ example['summary'] }}</p>
+          <pre class="token">{{ example['value']|tojson(indent=2) }}</pre>
+        {% endfor %}
+      {% endif %}
+
+      <h3>Responses</h3>
+      <table>
+        {% for code, response in operation['responses'].items() %}
+          <tr>
+            <td><span class="status s{{ code[0] }}">{{ code }}</span></td>
+            <td class="muted">{{ response['description'] }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+
+      <h3>Example</h3>
+      <pre class="token">curl{% if method != 'get' %} -X {{ method|upper }}{% endif %} {{ request.url_root[:-1] }}{{ path }} \
+  -H "Authorization: Bearer sem_..."{% if body %} \
+  -H "Content-Type: application/json" \
+  -d '{{ (body['content']['application/json'].get('examples', {}).values()|list|first)['value']|tojson }}'{% endif %}</pre>
+    </section>
+  {% endfor %}
+{% endfor %}
+{% endblock %}

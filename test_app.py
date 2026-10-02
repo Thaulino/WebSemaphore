@@ -7,6 +7,7 @@ import unittest
 os.environ["SEMAPHORE_DB"] = os.path.join(tempfile.mkdtemp(), "test.db")
 
 import app as app_module  # noqa: E402  (import after SEMAPHORE_DB is set)
+import auth  # noqa: E402
 import db  # noqa: E402
 
 
@@ -38,6 +39,23 @@ class SemaphoreTest(unittest.TestCase):
             password=password,
             confirm=password,
         )
+
+    def latest_claim_id(self):
+        conn = db.connect()
+        try:
+            return conn.execute("SELECT MAX(id) AS id FROM claims").fetchone()["id"]
+        finally:
+            conn.close()
+
+    def user_id(self, username):
+        conn = db.connect()
+        try:
+            row = conn.execute(
+                "SELECT id FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            return row["id"] if row else None
+        finally:
+            conn.close()
 
     def test_login_is_required(self):
         response = self.client.get("/", follow_redirects=False)
@@ -85,7 +103,8 @@ class SemaphoreTest(unittest.TestCase):
         self.sign_up(self.client, "alice")
         resource_id = self.create_resource(self.client)
 
-        page = self.client.get(f"/resources/{resource_id}").get_data(as_text=True)
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn(f'id="r{resource_id}"', page)
         self.assertIn("lab-pi-03", page)
         self.assertIn("Pi with the CAN adapter", page)
         self.assertIn("rack-b", page)
@@ -124,7 +143,7 @@ class SemaphoreTest(unittest.TestCase):
 
         self.post(f"/claims/{claim_id}/release", client=alice)
         taken = self.post(f"/resources/{resource_id}/acquire", client=bob, note="tests")
-        self.assertIn("Slot is yours", taken.get_data(as_text=True))
+        self.assertIn("Resource locked", taken.get_data(as_text=True))
 
     def test_capacity_allows_several_holders(self):
         alice, bob = app_module.app.test_client(), app_module.app.test_client()
@@ -134,7 +153,7 @@ class SemaphoreTest(unittest.TestCase):
 
         self.post(f"/resources/{resource_id}/acquire", client=alice)
         response = self.post(f"/resources/{resource_id}/acquire", client=bob)
-        self.assertIn("Slot is yours", response.get_data(as_text=True))
+        self.assertIn("Resource locked", response.get_data(as_text=True))
         self.assertIn("0 / 2 free", response.get_data(as_text=True))
 
     def test_only_owner_can_edit_or_delete(self):
@@ -175,6 +194,330 @@ class SemaphoreTest(unittest.TestCase):
             labels="",
         )
         self.assertIn("cannot drop below", response.get_data(as_text=True))
+
+    # --- everything on the index page ----------------------------------
+
+    def test_there_is_no_separate_detail_page(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        self.assertEqual(self.client.get(f"/resources/{resource_id}").status_code, 404)
+
+    def test_index_shows_holder_and_comment(self):
+        alice, bob = app_module.app.test_client(), app_module.app.test_client()
+        self.sign_up(alice, "alice")
+        self.sign_up(bob, "bob")
+        resource_id = self.create_resource(alice)
+        self.post(
+            f"/resources/{resource_id}/acquire", client=alice, note="flashing firmware"
+        )
+
+        page = bob.get("/").get_data(as_text=True)
+        self.assertIn("alice", page)
+        self.assertIn("flashing firmware", page)
+
+    def test_index_lock_form_has_a_comment_field(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        page = self.client.get("/").get_data(as_text=True)
+        form = page.split(f"/resources/{resource_id}/acquire")[1].split("</form>")[0]
+        self.assertIn('name="note"', form)
+        self.assertIn(">Lock</button>", form)
+
+    def test_comment_entered_on_index_is_stored_and_shown(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        page = self.post(
+            f"/resources/{resource_id}/acquire", note="debugging the CAN bus"
+        ).get_data(as_text=True)
+        self.assertIn("debugging the CAN bus", page)
+
+    def test_history_is_collapsed_by_default(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        self.post(f"/resources/{resource_id}/acquire", note="first run")
+        claim_id = self.latest_claim_id()
+        self.post(f"/claims/{claim_id}/release")
+
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("<details", page)
+        self.assertIn("Recent history", page)
+        self.assertNotIn("<details open", page)
+        self.assertIn("first run", page)
+
+    def test_your_resources_section_is_named_correctly(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        self.post(f"/resources/{resource_id}/acquire")
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("Your resources", page)
+        self.assertNotIn("Your slots", page)
+
+    def test_index_heading_says_resources(self):
+        self.sign_up(self.client, "alice")
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn('class="brand" href="/">Resources</a>', page)
+
+    # --- admin ---------------------------------------------------------
+
+    def test_first_user_is_admin_and_second_is_not(self):
+        alice, bob = app_module.app.test_client(), app_module.app.test_client()
+        self.sign_up(alice, "alice")
+        self.sign_up(bob, "bob")
+        self.assertEqual(alice.get("/admin/users").status_code, 200)
+        self.assertEqual(bob.get("/admin/users").status_code, 403)
+
+    def test_admin_changes_a_password(self):
+        alice, bob = app_module.app.test_client(), app_module.app.test_client()
+        self.sign_up(alice, "alice")
+        self.sign_up(bob, "bob")
+        bob_id = self.user_id("bob")
+
+        self.post(
+            f"/admin/users/{bob_id}/password",
+            client=alice,
+            password="brandnewpass",
+            confirm="brandnewpass",
+        )
+        fresh = app_module.app.test_client()
+        fresh.get("/login")
+        self.post("/login", client=fresh, username="bob", password="brandnewpass")
+        self.assertEqual(fresh.get("/").status_code, 200)
+
+    def test_admin_password_change_requires_matching_confirmation(self):
+        alice = app_module.app.test_client()
+        bob = app_module.app.test_client()
+        self.sign_up(alice, "alice")
+        self.sign_up(bob, "bob")
+        response = self.post(
+            f"/admin/users/{self.user_id('bob')}/password",
+            client=alice,
+            password="brandnewpass",
+            confirm="something-else",
+        )
+        self.assertIn("do not match", response.get_data(as_text=True))
+
+    def test_admin_deletes_user_and_inherits_resources(self):
+        alice, bob = app_module.app.test_client(), app_module.app.test_client()
+        self.sign_up(alice, "alice")
+        self.sign_up(bob, "bob")
+        resource_id = self.create_resource(bob, name="bobs-box")
+        bob_id = self.user_id("bob")
+
+        self.post(f"/admin/users/{bob_id}/delete", client=alice)
+        self.assertIsNone(self.user_id("bob"))
+
+        detail = alice.get("/").get_data(as_text=True)
+        self.assertIn("owner alice", detail)
+
+    def test_admin_cannot_delete_self_or_last_admin(self):
+        alice = app_module.app.test_client()
+        self.sign_up(alice, "alice")
+        response = self.post(
+            f"/admin/users/{self.user_id('alice')}/delete", client=alice
+        )
+        self.assertIn("cannot delete your own account", response.get_data(as_text=True))
+
+        response = self.post(
+            f"/admin/users/{self.user_id('alice')}/admin", client=alice, grant="0"
+        )
+        self.assertIn("at least one admin", response.get_data(as_text=True))
+
+    def test_non_admin_cannot_reach_admin_actions(self):
+        alice, bob = app_module.app.test_client(), app_module.app.test_client()
+        self.sign_up(alice, "alice")
+        self.sign_up(bob, "bob")
+        response = self.post(
+            f"/admin/users/{self.user_id('alice')}/password",
+            client=bob,
+            password="takeover123",
+            confirm="takeover123",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    # --- password reveal ----------------------------------------------
+
+    def test_login_password_field_is_revealable(self):
+        page = self.client.get("/login").get_data(as_text=True)
+        self.assertIn("data-reveal", page)
+        self.assertIn("app.js", page)
+
+    # --- locking from the index ---------------------------------------
+
+    def test_lock_from_index_returns_to_index(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn(f"/resources/{resource_id}/acquire", page)
+
+        response = self.client.post(
+            f"/resources/{resource_id}/acquire",
+            data={"csrf": self.csrf(), "back": "/?label=rack-b"},
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/?label=rack-b"))
+
+    def test_back_parameter_cannot_redirect_off_site(self):
+        self.sign_up(self.client, "alice")
+        resource_id = self.create_resource(self.client)
+        response = self.client.post(
+            f"/resources/{resource_id}/acquire",
+            data={"csrf": self.csrf(), "back": "//evil.example.com/"},
+            follow_redirects=False,
+        )
+        self.assertEqual(f"/#r{resource_id}", response.headers["Location"])
+
+    # --- REST API ------------------------------------------------------
+
+    def api_token(self, client):
+        """The plaintext token is shown exactly once, on the page after creation."""
+        page = self.post("/settings/tokens", client=client, name="test").get_data(
+            as_text=True
+        )
+        return page.split('id="new-token">')[1].split("</pre>")[0].strip()
+
+    def test_api_requires_a_valid_token(self):
+        self.assertEqual(self.client.get("/api/me").status_code, 401)
+        response = self.client.get(
+            "/api/me", headers={"Authorization": "Bearer sem_dead_beef"}
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_api_ignores_session_cookies(self):
+        """A logged-in browser session must not be enough to drive the API."""
+        self.sign_up(self.client, "alice")
+        self.assertEqual(self.client.get("/api/me").status_code, 401)
+
+    def test_api_lock_explicit_and_by_label(self):
+        self.sign_up(self.client, "alice")
+        self.create_resource(self.client, name="lab-pi-03", labels="rack-b hardware")
+        self.create_resource(self.client, name="lab-pi-04", labels="rack-b hardware")
+        token = self.api_token(self.client)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        me = self.client.get("/api/me", headers=headers)
+        self.assertEqual(me.get_json()["username"], "alice")
+
+        listed = self.client.get("/api/v1/resources?label=rack-b", headers=headers)
+        self.assertEqual(len(listed.get_json()["resources"]), 2)
+
+        explicit = self.client.post(
+            "/api/v1/locks", json={"resource": "lab-pi-03", "note": "ci"}, headers=headers
+        )
+        self.assertEqual(explicit.status_code, 201)
+        self.assertEqual(explicit.get_json()["resource"], "lab-pi-03")
+
+        # Both are capacity 1, so by-label must skip the one just taken.
+        by_label = self.client.post(
+            "/api/v1/locks", json={"label": "rack-b"}, headers=headers
+        )
+        self.assertEqual(by_label.status_code, 201)
+        self.assertEqual(by_label.get_json()["resource"], "lab-pi-04")
+
+        # Nothing free now.
+        full = self.client.post("/api/v1/locks", json={"label": "rack-b"}, headers=headers)
+        self.assertEqual(full.status_code, 409)
+        self.assertIn("occupied", full.get_json()["error"])
+
+        locks = self.client.get("/api/v1/locks", headers=headers).get_json()["locks"]
+        self.assertEqual(len(locks), 2)
+
+        released = self.client.delete(
+            f"/api/v1/locks/{locks[0]['lock_id']}", headers=headers
+        )
+        self.assertEqual(released.status_code, 200)
+        retaken = self.client.post(
+            "/api/v1/locks", json={"label": "rack-b"}, headers=headers
+        )
+        self.assertEqual(retaken.status_code, 201)
+
+    def test_api_rejects_ambiguous_or_unknown_targets(self):
+        self.sign_up(self.client, "alice")
+        self.create_resource(self.client)
+        headers = {"Authorization": f"Bearer {self.api_token(self.client)}"}
+
+        both = self.client.post(
+            "/api/v1/locks", json={"resource": "x", "label": "y"}, headers=headers
+        )
+        self.assertEqual(both.status_code, 400)
+
+        neither = self.client.post("/api/v1/locks", json={}, headers=headers)
+        self.assertEqual(neither.status_code, 400)
+
+        unknown = self.client.post(
+            "/api/v1/locks", json={"resource": "nope"}, headers=headers
+        )
+        self.assertEqual(unknown.status_code, 404)
+
+        no_label = self.client.post(
+            "/api/v1/locks", json={"label": "nope"}, headers=headers
+        )
+        self.assertEqual(no_label.status_code, 404)
+
+    def test_revoked_token_stops_working(self):
+        self.sign_up(self.client, "alice")
+        token = self.api_token(self.client)
+        headers = {"Authorization": f"Bearer {token}"}
+        self.assertEqual(self.client.get("/api/me", headers=headers).status_code, 200)
+
+        page = self.client.get("/settings").get_data(as_text=True)
+        token_id = page.split("/settings/tokens/")[1].split("/revoke")[0]
+        self.post(f"/settings/tokens/{token_id}/revoke")
+        self.assertEqual(self.client.get("/api/me", headers=headers).status_code, 401)
+
+    def test_password_change_revokes_tokens(self):
+        alice, bob = app_module.app.test_client(), app_module.app.test_client()
+        self.sign_up(alice, "alice")
+        self.sign_up(bob, "bob")
+        headers = {"Authorization": f"Bearer {self.api_token(bob)}"}
+        self.assertEqual(alice.get("/api/me", headers=headers).status_code, 200)
+
+        self.post(
+            f"/admin/users/{self.user_id('bob')}/password",
+            client=alice,
+            password="brandnewpass",
+            confirm="brandnewpass",
+        )
+        self.assertEqual(alice.get("/api/me", headers=headers).status_code, 401)
+
+    def test_tokens_containing_underscores_resolve(self):
+        """The random secret is urlsafe base64, so it often contains '_'."""
+        self.sign_up(self.client, "alice")
+        conn = db.connect()
+        try:
+            user_id = self.user_id("alice")
+            saw_underscore = False
+            for _ in range(25):
+                _, token = auth.create_token(conn, user_id, "loop")
+                saw_underscore |= "_" in token.split("_", 2)[2]
+                self.assertIsNotNone(
+                    auth.user_for_token(conn, token), f"failed to resolve {token}"
+                )
+            self.assertTrue(saw_underscore, "test never exercised the '_' case")
+        finally:
+            conn.close()
+
+    def test_api_docs_render_without_external_assets(self):
+        """The docs must work on a machine with no internet access."""
+        self.sign_up(self.client, "alice")
+        page = self.client.get("/api/docs").get_data(as_text=True)
+        self.assertNotIn("http://unpkg", page)
+        self.assertNotIn("https://", page.split("</head>")[-1])
+
+        spec = self.client.get("/api/openapi.json").get_json()
+        for path, operations in spec["paths"].items():
+            self.assertIn(path, page)
+            for method in operations:
+                self.assertIn(f">{method.upper()}</span>", page)
+
+    def test_openapi_document_is_served(self):
+        spec = self.client.get("/api/openapi.json").get_json()
+        self.assertEqual(spec["openapi"], "3.1.0")
+        self.assertIn("/api/v1/locks", spec["paths"])
+        self.assertIn("bearerAuth", spec["components"]["securitySchemes"])
+        for path, operations in spec["paths"].items():
+            for method, operation in operations.items():
+                self.assertIn("responses", operation, f"{method} {path}")
 
     def test_bad_label_is_rejected(self):
         self.sign_up(self.client, "alice")

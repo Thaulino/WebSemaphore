@@ -8,16 +8,22 @@
 </head>
 <body>
   <header class="bar">
-    <a class="brand" href="{{ url_for('index') }}">Semaphore</a>
-    {% if user %}
-      <nav>
+    <nav class="bar-left">
+      <a class="brand" href="{{ url_for('index') }}">Resources</a>
+      {% if user %}
         <a href="{{ url_for('new_resource') }}">New resource</a>
+        <a href="{{ url_for('settings') }}">API tokens</a>
+        {% if user['is_admin'] %}<a href="{{ url_for('admin_users') }}">Admin</a>{% endif %}
+      {% endif %}
+    </nav>
+    {% if user %}
+      <div class="bar-right">
         <span class="who">{{ user['username'] }}</span>
         <form method="post" action="{{ url_for('logout') }}">
           <input type="hidden" name="csrf" value="{{ csrf_token() }}">
           <button class="link" type="submit">Sign out</button>
         </form>
-      </nav>
+      </div>
     {% endif %}
   </header>
 
@@ -29,5 +35,6 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

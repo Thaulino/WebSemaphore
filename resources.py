@@ -166,6 +166,16 @@ def my_claims(conn, user_id):
     ).fetchall()
 
 
+def _claim_slot(conn, resource_id, user_id, note):
+    """Insert a claim. Caller must already hold a write transaction."""
+    cur = conn.execute(
+        "INSERT INTO claims (resource_id, user_id, note, acquired_at)"
+        " VALUES (?, ?, ?, ?)",
+        (resource_id, user_id, (note or "").strip()[:200], db.now()),
+    )
+    return cur.lastrowid
+
+
 def acquire(conn, resource_id, user_id, note):
     """Take one slot. The transaction is what keeps two users off the last slot."""
     conn.execute("BEGIN IMMEDIATE")
@@ -177,15 +187,48 @@ def acquire(conn, resource_id, user_id, note):
             raise Error("That resource no longer exists.")
         if count_active(conn, resource_id) >= resource["capacity"]:
             raise Error(f"{resource['name']} is fully occupied right now.")
-        conn.execute(
-            "INSERT INTO claims (resource_id, user_id, note, acquired_at)"
-            " VALUES (?, ?, ?, ?)",
-            (resource_id, user_id, (note or "").strip()[:200], db.now()),
-        )
+        claim_id = _claim_slot(conn, resource_id, user_id, note)
         conn.execute("COMMIT")
+        return claim_id
     except Exception:
         conn.execute("ROLLBACK")
         raise
+
+
+def acquire_by_label(conn, label, user_id, note):
+    """Lock the first resource carrying `label` that still has a free slot."""
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        candidates = conn.execute(
+            "SELECT r.* FROM resources r"
+            " JOIN resource_labels l ON l.resource_id = r.id"
+            " WHERE l.label = ? ORDER BY r.name COLLATE NOCASE",
+            (label,),
+        ).fetchall()
+        if not candidates:
+            raise Error(f"No resource carries the label {label!r}.")
+        for resource in candidates:
+            if count_active(conn, resource["id"]) < resource["capacity"]:
+                claim_id = _claim_slot(conn, resource["id"], user_id, note)
+                conn.execute("COMMIT")
+                return claim_id, resource
+        raise Error(f"Every resource labelled {label!r} is occupied right now.")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+
+
+def by_name_or_id(conn, value):
+    """Resources are addressable by numeric id or by name in the API."""
+    if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+        row = get(conn, int(value))
+        if row is not None:
+            return row
+    return conn.execute(
+        "SELECT r.*, u.username AS owner FROM resources r"
+        " JOIN users u ON u.id = r.owner_id WHERE r.name = ?",
+        (str(value),),
+    ).fetchone()
 
 
 def release(conn, claim_id, user_id, is_owner):

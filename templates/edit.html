@@ -26,7 +26,7 @@
     </label>
     <button type="submit">{{ 'Save changes' if editing else 'Create resource' }}</button>
     {% if editing %}
-      <a class="muted" href="{{ url_for('resource_detail', resource_id=resource['id']) }}">Cancel</a>
+      <a class="muted" href="{{ url_for('index') }}#r{{ resource['id'] }}">Cancel</a>
     {% endif %}
   </form>
 </div>

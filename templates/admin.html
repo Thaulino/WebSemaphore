@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Users · Semaphore{% endblock %}
+
+{% block content %}
+<section class="card">
+  <h1>Users</h1>
+  <p class="muted">
+    Deleting an account hands its resources to you and removes its claim history.
+    Changing a password also revokes that user's API tokens.
+  </p>
+
+  <ul class="admin-users">
+    {% for entry in users %}
+      <li>
+        <div class="row">
+          <span>
+            <strong>{{ entry['username'] }}</strong>
+            {% if entry['is_admin'] %}<span class="chip on">admin</span>{% endif %}
+            {% if entry['id'] == user['id'] %}<span class="chip">you</span>{% endif %}
+          </span>
+          <span class="muted">
+            {{ entry['owned'] }} owned · {{ entry['holding'] }} held · joined {{ entry['created_at']|stamp }}
+          </span>
+        </div>
+
+        <div class="admin-row">
+          <form class="inline" method="post"
+                action="{{ url_for('admin_set_password', user_id=entry['id']) }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <input name="password" type="password" placeholder="New password"
+                   autocomplete="new-password" data-reveal required>
+            <input name="confirm" type="password" placeholder="Repeat"
+                   autocomplete="new-password" required>
+            <button class="small" type="submit">Set password</button>
+          </form>
+
+          <form class="inline" method="post"
+                action="{{ url_for('admin_toggle_admin', user_id=entry['id']) }}">
+            <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="grant" value="{{ '0' if entry['is_admin'] else '1' }}">
+            <button class="small" type="submit">
+              {{ 'Revoke admin' if entry['is_admin'] else 'Make admin' }}
+            </button>
+          </form>
+
+          {% if entry['id'] != user['id'] %}
+            <form class="inline" method="post"
+                  action="{{ url_for('admin_delete_user', user_id=entry['id']) }}"
+                  onsubmit="return confirm('Delete {{ entry['username'] }}? Their {{ entry['owned'] }} resource(s) become yours and their history is removed.')">
+              <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+              <button class="small danger" type="submit">Delete</button>
+            </form>
+          {% endif %}
+        </div>
+      </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

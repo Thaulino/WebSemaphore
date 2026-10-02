@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}API tokens · Semaphore{% endblock %}
+
+{% block content %}
+{% if new_token %}
+  <section class="card">
+    <h2>New token{% if new_token['name'] %}: {{ new_token['name'] }}{% endif %}</h2>
+    <p class="muted">Copy it now — only a hash is stored, so it cannot be shown again.</p>
+    <pre class="token" id="new-token">{{ new_token['token'] }}</pre>
+  </section>
+{% endif %}
+
+<section class="card">
+  <h1>API tokens</h1>
+  <p class="muted">
+    Use a token to lock resources from scripts or CI. See the
+    <a href="{{ url_for('api_docs') }}">API documentation</a>.
+  </p>
+
+  <form class="inline" method="post" action="{{ url_for('create_token') }}">
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <input name="name" maxlength="60" placeholder="What is it for? e.g. nightly-ci">
+    <button type="submit">Create token</button>
+  </form>
+
+  {% if tokens %}
+    <table>
+      <tr><th>Name</th><th>Prefix</th><th>Created</th><th>Last used</th><th></th></tr>
+      {% for token in tokens %}
+        <tr>
+          <td>{{ token['name'] or '—' }}</td>
+          <td><code>sem_{{ token['prefix'] }}…</code></td>
+          <td class="muted">{{ token['created_at']|stamp }}</td>
+          <td class="muted">{{ token['last_used_at']|stamp }}</td>
+          <td>
+            <form method="post" action="{{ url_for('revoke_token', token_id=token['id']) }}">
+              <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+              <button class="small danger" type="submit">Revoke</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </table>
+  {% else %}
+    <p class="muted">No tokens yet.</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>Quick start</h2>
+  <pre class="token">curl -X POST {{ request.url_root }}api/v1/locks \
+  -H "Authorization: Bearer sem_..." \
+  -H "Content-Type: application/json" \
+  -d '{"label": "rack-b", "note": "CI job 4711"}'</pre>
+</section>
+{% endblock %}
